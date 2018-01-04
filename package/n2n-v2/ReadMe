@@ -1,0 +1,2 @@
+1，cd ../..
+2,make package/n2n-v2/prepare V=99   #Compile into menuconfig and then to compile the firmware,If there is failure to enter the URL you need to manually download n2n_xxx.tr.gz to the dl directory execute the command again
