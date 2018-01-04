@@ -1,0 +1,81 @@
+#!/bin/sh
+
+. /usr/share/libubox/jshn.sh
+
+[ "$INTERFACE" = wan ]&&[ "$ACTION" = ifup ]&&{
+	old_conn_req_ip=`cat /tmp/old_conn_req_ip`
+	Status=`ubus call network.interface.wan status 2>/dev/null`
+	json_load "${Status:-{}}"
+	if json_get_type Status ipv4-address && [ "$Status" = array ]; then
+		json_select ipv4-address
+		json_get_type Status 1
+		if [ "$Status" = object ]; then
+			json_select 1
+			json_get_var conn_req_ip address
+			echo $conn_req_ip > /tmp/old_conn_req_ip
+		fi
+	fi
+	[ "$conn_req_ip" != "" ]&&[ "$conn_req_ip" != "$old_conn_req_ip" ]&&{
+		restart_tr=0
+		connection_type=`uci get ipv6.@global[0].connection_type`
+		if [ "$connection_type" = "1" ]; then
+			new_wan6_ip=`uci get ipv6.@wan_addr[0].wan_ipv6addres`
+			if [ "$new_wan6_ip" = "" ]; then
+				restart_tr=1
+			fi
+		fi
+
+		if [ "$connection_type" = "5" ]; then
+			new_wan6_ip=`uci get ipv6.@static[0].wanipv6_addr`
+			if [ "$new_wan6_ip" = "" ]; then
+				restart_tr=1
+			fi
+		fi
+
+		if [ "$restart_tr" = 1 ]; then
+			echo "restart tr-069" > /dev/console
+			/etc/init.d/oneagent_mon restart &
+			/etc/init.d/tr-069 restart &
+		fi
+		
+		if [ "$connection_type" = "0" ]; then
+			echo "restart tr-069" > /dev/console
+			/etc/init.d/oneagent_mon restart &
+			/etc/init.d/tr-069 restart &
+		fi
+	}
+}
+
+[ "$INTERFACE" = wan6 ]&&[ "$ACTION" = ifup ]&&{
+	old_wan6_ip=`cat /tmp/old_wan6_ip`
+	connection_type=`uci get ipv6.@global[0].connection_type`
+	if [ "$connection_type" = "1" ]; then
+		new_wan6_ip=`uci get ipv6.@wan_addr[0].wan_ipv6addres`
+	fi
+
+	if [ "$connection_type" = "5" ]; then
+		new_wan6_ip=`uci get ipv6.@static[0].wanipv6_addr`
+	fi
+
+	echo $new_wan6_ip > /tmp/old_wan6_ip
+
+        [ "$new_wan6_ip" != "" ]&&[ "$new_wan6_ip" != "$old_wan6_ip" ]&&{
+                echo "ipv6 different address call restart tr-069" > /dev/console
+                /etc/init.d/oneagent_mon restart &
+                /etc/init.d/tr-069 restart &
+        }
+}
+
+[ "$INTERFACE" = wan6 ]&&[ "$ACTION" = ifdown ]&&{
+        old_wan6_ip=`cat /tmp/old_wan6_ip`                                 
+        connection_type=`uci get ipv6.@global[0].connection_type`
+
+	if [ "$connection_type" = "0" ]; then
+		if [ "$old_wan6_ip" != "" ]; then
+			echo "" > /tmp/old_wan6_ip
+                	echo "restart tr-069" > /dev/console                         
+                	/etc/init.d/oneagent_mon restart &                           
+                	/etc/init.d/tr-069 restart &
+		fi
+	fi
+}

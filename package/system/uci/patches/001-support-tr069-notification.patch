@@ -1,0 +1,303 @@
+Index: uci-2015-08-27.1/delta.c
+===================================================================
+--- uci-2015-08-27.1.orig/delta.c
++++ uci-2015-08-27.1/delta.c
+@@ -31,6 +31,29 @@
+ #include "uci.h"
+ #include "uci_internal.h"
+ 
++#ifndef SKYSOFT_TR_SUPPORT
++#include <stdarg.h>
++#define NOTIFY_LOG_FILE "/tmp/notify_static.log"
++#ifdef DEBUG_TR_NOTIFY
++void log_notify(const char *format, ...)
++{
++	FILE *logfd = NULL;
++	va_list args;
++
++	logfd = fopen(NOTIFY_LOG_FILE, "a");
++	if(logfd)
++	{   
++		fprintf(logfd, format, args);
++		fprintf(logfd, "%s", "\n");
++		fflush(logfd);
++		fclose(logfd);
++	}   
++}
++#else
++#define log_notify(...);
++#endif
++#endif
++
+ /* record a change that was done to a package */
+ void
+ uci_add_delta(struct uci_context *ctx, struct uci_list *list, int cmd, const char *section, const char *option, const char *value)
+@@ -209,6 +232,12 @@ static void uci_parse_delta_line(struct uci_context *ctx, struct uci_package *p)
+ 	struct uci_element *e = NULL;
+ 	struct uci_ptr ptr;
+ 	int cmd;
++#ifndef SKYSOFT_TR_SUPPORT
++	char uci_path[512] = {0};
++	struct uci_section *s = NULL;
++	int i = 0;
++	char str[128]="none";
++#endif
+ 
+ 	cmd = uci_parse_delta_tuple(ctx, &ptr);
+ 	if (strcmp(ptr.package, p->e.name) != 0)
+@@ -242,6 +271,24 @@ static void uci_parse_delta_line(struct uci_context *ctx, struct uci_package *p)
+ 		e = ptr.last;
+ 		if (!ptr.option && e && (cmd == UCI_CMD_ADD))
+ 			uci_to_section(e)->anonymous = true;
++#ifndef SKYSOFT_TR_SUPPORT
++		if(cmd == UCI_CMD_CHANGE && is_send_notify()){
++			sprintf(uci_path, "%s.%s.%s", ptr.package, ptr.section, ptr.option);
++			uci_foreach_element(&p->sections, e) {
++				s = uci_to_section(e);
++				if(strcmp(str,s->type)==0) i++;
++				else i = 0;
++				sprintf(str,"%s",s->type);
++				if(s->anonymous && strcmp(s->e.name,ptr.section) == 0)
++				{
++					sprintf(uci_path, "%s.@%s[%d].%s", ptr.package, s->type, i, ptr.option);
++					break;
++				}
++			}
++			log_notify(uci_path);
++			uci_add_notify(ctx, uci_path);
++		}
++#endif
+ 		break;
+ 	}
+ 	return;
+Index: uci-2015-08-27.1/file.c
+===================================================================
+--- uci-2015-08-27.1.orig/file.c
++++ uci-2015-08-27.1/file.c
+@@ -725,6 +725,10 @@ static void uci_file_commit(struct uci_context *ctx, struct uci_package **package, bool overwrite)
+ 	struct stat statbuf;
+ 	bool do_rename = false;
+ 
++#ifndef SKYSOFT_TR_SUPPORT
++	uci_set_action(ACT_COMMIT);
++	uci_init_notify();
++#endif
+ 	if (!p->path) {
+ 		if (overwrite)
+ 			p->path = uci_config_path(ctx, p->e.name);
+@@ -802,6 +806,10 @@ done:
+ 	free(filename);
+ 	if (ctx->err)
+ 		UCI_THROW(ctx, ctx->err);
++#ifdef SKYSOFT_TR_SUPPORT
++	uci_send_notify();
++	uci_set_action(ACT_NONE);
++#endif
+ }
+ 
+ 
+Index: uci-2015-08-27.1/uci.h
+===================================================================
+--- uci-2015-08-27.1.orig/uci.h
++++ uci-2015-08-27.1/uci.h
+@@ -71,6 +71,35 @@ struct uci_backend;
+ struct uci_parse_option;
+ struct uci_parse_context;
+ 
++#ifndef SKYSOFT_TR_SUPPORT
++enum uci_act{
++	/* section cmds */
++	ACT_NONE = 0,
++	ACT_GET,
++	ACT_SET,
++	ACT_ADD_LIST,
++	ACT_DEL_LIST,
++	ACT_DEL,
++	ACT_RENAME,
++	ACT_REVERT,
++	ACT_REORDER,
++	/* package cmds */
++	ACT_SHOW,
++	ACT_CHANGES,
++	ACT_EXPORT,
++	ACT_COMMIT,
++	/* other cmds */
++	ACT_ADD,
++	ACT_IMPORT,
++	ACT_HELP,
++};
++enum uci_cal
++{
++	UCI_CALLER_OTHERS = 0,
++	UCI_CALLER_TR = 1,
++};
++extern int uci_caller;
++#endif
+ 
+ /**
+  * uci_alloc_context: Allocate a new uci context
+@@ -360,6 +389,9 @@ enum uci_type {
+ 	UCI_TYPE_BACKEND = 6,
+ 	UCI_TYPE_ITEM = 7,
+ 	UCI_TYPE_HOOK = 8,
++#ifndef SKYSOFT_TR_SUPPORT
++	UCI_TYPE_NOTIFY = 9,
++#endif
+ };
+ 
+ enum uci_option_type {
+@@ -459,6 +491,13 @@ struct uci_option
+ 	} v;
+ };
+ 
++#ifndef SKYSOFT_TR_SUPPORT
++struct uci_notify
++{
++	struct uci_element e;
++};
++#endif
++
+ /*
+  * UCI_CMD_ADD is used for anonymous sections or list values
+  */
+@@ -578,6 +617,9 @@ struct uci_parse_option {
+ #define uci_type_package UCI_TYPE_PACKAGE
+ #define uci_type_section UCI_TYPE_SECTION
+ #define uci_type_option UCI_TYPE_OPTION
++#ifndef SKYSOFT_TR_SUPPORT
++#define uci_type_notify UCI_TYPE_NOTIFY
++#endif
+ 
+ /* element typecasting */
+ #ifdef UCI_DEBUG_TYPECAST
+@@ -587,6 +629,9 @@ static const char *uci_typestr[] = {
+ 	[uci_type_package] = "package",
+ 	[uci_type_section] = "section",
+ 	[uci_type_option] = "option",
++#ifndef SKYSOFT_TR_SUPPORT
++	[uci_type_notify] = "notify",
++#endif
+ };
+ 
+ static void uci_typecast_error(int from, int to)
+@@ -608,6 +653,9 @@ BUILD_CAST(delta)
+ BUILD_CAST(package)
+ BUILD_CAST(section)
+ BUILD_CAST(option)
++#ifndef SKYSOFT_TR_SUPPORT
++BUILD_CAST(notify)
++#endif
+ 
+ #else
+ #define uci_to_backend(ptr) container_of(ptr, struct uci_backend, e)
+@@ -615,6 +663,9 @@ BUILD_CAST(option)
+ #define uci_to_package(ptr) container_of(ptr, struct uci_package, e)
+ #define uci_to_section(ptr) container_of(ptr, struct uci_section, e)
+ #define uci_to_option(ptr)  container_of(ptr, struct uci_option, e)
++#ifndef SKYSOFT_TR_SUPPORT
++#define uci_to_notify(ptr)  container_of(ptr, struct uci_notify, e)
++#endif
+ #endif
+ 
+ /**
+@@ -689,6 +740,17 @@ uci_lookup_option_string(struct uci_context *ctx, struct uci_section *s, const char *name)
+ 	return o->v.string;
+ }
+ 
++#ifndef SKYSOFT_TR_SUPPORT
++enum uci_cal uci_get_caller();
++void uci_set_caller(enum uci_cal caller);
++enum uci_act uci_get_action();
++void uci_set_action(enum uci_act action);
++bool is_send_notify();
++void uci_init_notify();
++int uci_add_notify(struct uci_context *ctx, const char *uci_path);
++void uci_send_notify();
++#endif
++
+ #ifdef __cplusplus
+ }
+ #endif
+Index: uci-2015-08-27.1/list.c
+===================================================================
+--- uci-2015-08-27.1.orig/list.c
++++ uci-2015-08-27.1/list.c
+@@ -12,6 +12,12 @@
+  * GNU Lesser General Public License for more details.
+  */
+ 
++#ifndef SKYSOFT_TR_SUPPORT
++struct uci_list notifies;
++enum uci_act uci_action = ACT_NONE;
++int uci_caller = UCI_CALLER_OTHERS;
++#endif
++
+ static void uci_list_set_pos(struct uci_list *head, struct uci_list *ptr, int pos)
+ {
+ 	struct uci_list *new_head = head;
+@@ -731,3 +737,65 @@ int uci_unload(struct uci_context *ctx, struct uci_package *p)
+ 	return 0;
+ }
+ 
++#ifndef SKYSOFT_TR_SUPPORT
++enum uci_cal uci_get_caller()
++{
++	return uci_caller;
++}
++
++void uci_set_caller(enum uci_cal caller)
++{
++	uci_caller = caller;
++}
++
++enum uci_act uci_get_action()
++{
++	return uci_action;
++}
++
++void uci_set_action(enum uci_act action)
++{
++	uci_action = action;
++}
++
++bool is_send_notify()
++{
++	if(uci_get_action() == ACT_COMMIT && uci_caller != UCI_CALLER_TR)
++		return true;
++	else
++		return false;
++}
++
++void uci_init_notify()
++{
++	uci_list_init(&notifies);
++}
++
++int uci_add_notify(struct uci_context *ctx, const char *uci_path)
++{
++	struct uci_notify *n;
++
++	n = uci_alloc_element(ctx, notify, uci_path, 0);
++	uci_list_add(&notifies, &n->e.list);
++
++	return 0;
++}
++
++void uci_free_notify(struct uci_notify *n)
++{
++	uci_free_element(&n->e);
++}
++
++void uci_send_notify()
++{
++	struct uci_element *e, *tmp;
++	char notify_cmd[1024] = {0};
++	char notify_prefix[128] = "/oneagent/senducitocli http://127.0.0.1:1234/value/change/group/";
++	
++	uci_foreach_element_safe(&notifies, tmp, e) {
++		sprintf(notify_cmd, "%s \"%s;\"", notify_prefix, e->name);
++		system(notify_cmd);
++		uci_free_notify(uci_to_notify(e));
++	}
++}
++#endif

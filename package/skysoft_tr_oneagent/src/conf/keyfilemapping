@@ -1,0 +1,4 @@
+DHCPv4ServerPool1ClientMap.mapping = Device.DHCPv4.Server.Pool.1.Client.i
+DHCPv4ServerPool1ClientIPv4AddrMap.mapping = Device.DHCPv4.Server.Pool.1.Client.IPv4Address.i
+DHCPv4ServerPool1StaticAddressMap.mapping = Device.DHCPv4.Server.Pool.1.StaticAddress.i
+RouterIPv4Map.mapping = Device.Routing.Router.1.IPv4Forwarding.i

@@ -1,0 +1,151 @@
+#!/bin/sh
+. /usr/share/libubox/jshn.sh
+#echo "ACTION:$ACTION, INTERFACE:$INTERFACE, DEVICE:$DEVICE" >> /dev/console
+[ ifup = "$ACTION" ] && [ lan = "$INTERFACE" ] && {
+	local i url rdethers staticlist clientlist keyval1 keyval2 static_num client_num
+	
+	url="http://127.0.0.1:1234/value/change/group/"
+	dhcpv4_server_pool_num="trconf.Device_DHCPv4_Server.PoolNumberOfEntries"                  
+	dhcpv4_server_pool_iface="trconf.Device_DHCPv4_Server_Pool_template.Interface"                 
+	dhcpv4_server_pool_vendorID="trconf.Device_DHCPv4_Server_Pool_template.VendorClassID"             
+	dhcpv4_server_pool_vendorMode="trconf.Device_DHCPv4_Server_Pool_template.VendorClassIDMode"      
+	dhcpv4_server_pool_clientID="trconf.Device_DHCPv4_Server_Pool_template.ClientID"                     
+	dhcpv4_server_pool_userID="trconf.Device_DHCPv4_Server_Pool_template.UserClassID"
+	dhcpv4_server_pool_chaddr="trconf.Device_DHCPv4_Server_Pool_template.Chaddr"           
+	dhcpv4_server_pool_chaddr_mask="trconf.Device_DHCPv4_Server_Pool_template.ChaddrMask" 
+	dhcpv4_server_pool_reserved_addresses="trconf.Device_DHCPv4_Server_Pool_template.ReservedAddresses"
+	dhcpv4_server_pool_submask="trconf.Device_DHCPv4_Server_Pool_template.SubnetMask"         
+	dhcpv4_server_pool_iprouters="trconf.Device_DHCPv4_Server_Pool_template.IPRouters"                
+	dhcpv4_server_pool_static_numbers="trconf.Device_DHCPv4_Server_Pool_template.StaticAddressNumberOfEntries"
+	dhcpv4_server_pool_static_enable="Device.DHCPv4.Server.Pool.1.StaticAddress.i.Enable"
+	dhcpv4_server_pool_static_chaddr="Device.DHCPv4.Server.Pool.1.StaticAddress.i.Chaddr"
+	dhcpv4_server_pool_static_yiaddr="Device.DHCPv4.Server.Pool.1.StaticAddress.i.Yiaddr"
+	
+	#/oneagent/senducitocli ${url} "$dhcpv4_server_pool_num;$dhcpv4_server_pool_iface;$dhcpv4_server_pool_vendorID;$dhcpv4_server_pool_vendorMode;$dhcpv4_server_pool_clientID;"
+	#/oneagent/senducitocli ${url} "$dhcpv4_server_pool_userID;$dhcpv4_server_pool_chaddr;$dhcpv4_server_pool_chaddr_mask;"
+	#/oneagent/senducitocli ${url} "$dhcpv4_server_pool_reserved_addresses;$dhcpv4_server_pool_submask;$dhcpv4_server_pool_iprouters;"	
+
+	rdethers=`uci -q get dhcp.dnsmasq.readethers`
+	staticlist="$dhcpv4_server_pool_static_numbers"
+	static_num=`cat /etc/ethers | wc -l`
+	static_num=`expr $static_num - 1`
+	for i in $(seq $static_num); do                              
+		staticlist=${staticlist}";$dhcpv4_server_pool_static_enable;$dhcpv4_server_pool_static_chaddr;$dhcpv4_server_pool_static_yiaddr;"
+		keyval1=${keyval1}"$i&;$i&;$i&;"                            
+	done
+	#/oneagent/senducitocli ${url} "$staticlist" "$keyval1" 
+
+	dhcpv4_server_pool_client_chaddr="Device.DHCPv4.Server.Pool.1.Client.i.Chaddr"
+	dhcpv4_server_pool_client_num="Device.DHCPv4.Server.Pool.1.Client.i.IPv4AddressNumberOfEntries"
+	dhcpv4_server_pool_client_ipaddr="Device.DHCPv4.Server.Pool.1.Client.i.IPv4Address.1.IPAddress"
+	client_num=`cat /tmp/dhcp.leases | wc -l`
+	for i in $(seq $static_num); do
+		clientlist=${clientlist}";$dhcpv4_server_pool_client_chaddr;$dhcpv4_server_pool_client_num;$dhcpv4_server_pool_client_ipaddr;"
+		keyvalue2=${keyval2}"$i&;$i&;$i&;"		
+	done
+	#/oneagent/senducitocli ${url} "$clientlist" "$keyval2" 
+}
+
+[ ifup = "$ACTION" ] && [ wan = "$INTERFACE" ] && {
+	local iface link vlan link_wan_status ip ip_type 
+	local route_num dns_client_num dns_enable dns_type nat_iface_num nat_mapping_num
+        local keyval
+        
+	url="http://127.0.0.1:1234/value/change/group/"
+	iface="trconf.Device_Ethernet.InterfaceNumberOfEntries"
+        link="trconf.Device_Ethernet.LinkNumberOfEntries"
+        vlant="trconf.Device_Ethernet.VLANTerminationNumberOfEntries"
+        link_wan_status="network.wan.enabled"
+        ip="trconf.Device_IP.InterfaceNumberOfEntries"
+        ip_type="trconf.Device_IP_Interface_template.Type"
+ 	route_num="trconf.Device_Routing.RouterNumberOfEntries"
+	dns_client_num="trconf.Device_DNS_Client.ServerNumberOfEntries"
+	dns_client_status="trconf.Device_DNS_Client_Server_template.Status"
+	dns_enable="network.wan.peerdns"
+	dns_type="trconf.Device_DNS_Client_Server_template.Type"
+	nat_iface_num="trconf.Device_NAT.InterfaceSettingNumberOfEntries"
+	nat_mapping_num="trconf.Device_NAT.PortMappingNumberOfEntries"
+        ipv4_num="trconf.Device_IP_Interface_template.IPv4AddressNumberOfEntries"
+        dhcpv4_client_num="trconf.Device_DHCPv4.ClientNumberOfEntries"
+        dhcpv4_client_iface="trconf.Device_DHCPv4_Client_template.Interface"
+        dhcpv4_client_ipaddr="trconf.Device_DHCPv4_Client_template.IPAddress"
+        dhcpv4_client_submask="trconf.Device_DHCPv4_Client_template.SubnetMask"
+        dhcpv4_client_iprouters="trconf.Device_DHCPv4_Client_template.IPRouters"
+  	dhcpv4_client_dhcpserver="trconf.Device_DHCPv4_Client_template.DHCPServer"
+  	      
+        /oneagent/senducitocli ${url} "$iface;$link;$vlant;$link_wan_status;$ip;$ip_type;$ipv4_num;"
+	
+	ipv4_router_num=`cat /oneagent/conf/RouterIPv4Map.mapping | wc -l`
+	ipv4_static_num=`uci -q get staticrt.staticrt.listnum`
+	ipv4_trlist_num=`expr $ipv4_router_num - $ipv4_static_num`
+	routing_routerlist="$route_num;trconf.Device_Routing_Router_template.Enable"
+	if [ -n "$ipv4_static_num" ]; then	
+		for i in $(seq $ipv4_static_num); do	
+			routing_routerlist=${routing_routerlist}";Device.Routing.Router.1.IPv4Forwarding.i.Enable;"
+			keyval=${keyval}"`expr $i + $ipv4_trlist_num`&;"
+		done
+	fi
+	/oneagent/senducitocli ${url} "$routing_routerlist" "$keyval"
+	
+	/oneagent/senducitocli ${url} "$dns_client_num;$dns_client_status;$dns_type;"
+	
+	#/oneagent/senducitocli ${url} "$nat_iface_num;$nat_mapping_num;"
+	
+	/oneagent/senducitocli ${url} "$dhcpv4_client_num;$dhcpv4_client_iface;$dhcpv4_client_ipaddr;$dhcpv4_client_submask;$dhcpv4_client_iprouters;$dhcpv4_client_dhcpserver;"
+}
+
+[ ifup = "$ACTION" ] && [ wan = "$INTERFACE" ] && {
+	url="http://127.0.0.1:1234/value/change/group/"
+	DIP2I1_IPADDRESS="Device.IP.Interface.2.IPv4Address.1.IPAddress"
+	old_wan_ip=`cat /tmp/old_wan_ip`
+	Status=`ubus call network.interface.wan status 2>/dev/null`
+	json_load "${Status:-{}}"
+	if json_get_type Status ipv4-address && [ "$Status" = array ]; then
+		json_select ipv4-address
+		json_get_type Status 1
+		if [ "$Status" = object ]; then
+			json_select 1
+			json_get_var wan_ip address
+			echo $wan_ip > /tmp/old_wan_ip
+		fi
+	fi
+	[ "$wan_ip" != "" ]&&[ "$old_wan_ip" != "" ]&&[ "$wan_ip" != "$old_wan_ip" ]&&{
+		sleep 5
+		/oneagent/senducitocli ${url} "$DIP2I1_IPADDRESS;"
+	}
+}
+
+[ ifup = "$ACTION" ] && [ wan = "$INTERFACE" ] && {
+	notify_cmd="/oneagent/senducitocli http://127.0.0.1:1234/value/change/group/"
+	dns_svr_num="Device.DNS.Client.ServerNumberOfEntries"
+	dns_svr_1="Device.DNS.Client.Server.1.DNSServer"
+	dns_svr_2="Device.DNS.Client.Server.2.DNSServer"
+
+	old_dns_servers=`cat /tmp/old_dns_servers` 2>/dev/null
+	Status=`ubus call network.interface.wan status 2>/dev/null`
+	json_load "${Status:-{}}"
+	if json_get_type Status ipv4-address && [ "$Status" = array ]; then
+		json_select dns-server
+		json_get_values dns_servers
+		echo "$dns_servers" > /tmp/old_dns_servers 2>/dev/null
+	fi
+
+	dns_num=`echo $dns_servers | sed 's/ /\n/g' | wc -l`
+	dns1=`echo $dns_servers | awk '{print $1}'`
+	dns2=`echo $dns_servers | awk '{print $2}'`
+
+	old_dns_num=`echo $old_dns_servers | sed 's/ /\n/g' | wc -l`
+	old_dns1=`echo $old_dns_servers | awk '{print $1}'`
+	old_dns2=`echo $old_dns_servers | awk '{print $2}'`
+
+
+	if [ "$dns_num" != "$old_dns_num" && "$old_dns_num" != "0" ]; then
+		$notify_cmd "$dns_svr_num;"
+	fi
+	if [ "$dns1" != "$old_dns1" ]; then
+		$notify_cmd "$dns_svr_1;"
+	fi
+	if [ "$dns2" != "$old_dns2" ]; then
+		$notify_cmd "$dns_svr_2;"
+	fi	
+}

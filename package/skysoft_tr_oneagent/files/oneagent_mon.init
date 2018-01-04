@@ -1,0 +1,20 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2010 OpenWrt.org
+
+START=18
+STOP=95
+
+SERVICE_DAEMONIZE=1
+#SERVICE_WRITE_PID=1
+
+start() {
+	config_load 'trconf'
+	config_get_bool enabled Device_ManagementServer 'EnableCWMP' '0'
+	if [ 1 -eq $enabled ]; then
+		service_start /oneagent/oneagent_mon
+	fi
+}
+
+stop() {
+	service_stop /oneagent/oneagent_mon
+}

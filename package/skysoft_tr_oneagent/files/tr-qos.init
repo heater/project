@@ -1,0 +1,11 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2010 OpenWrt.org
+
+start() {
+	/oneagent/runCommand qos start
+}
+
+stop() {
+	/oneagent/runCommand qos stop
+}
+
